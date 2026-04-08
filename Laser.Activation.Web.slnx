@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Laser.Activation.Web/Laser.Activation.Web.Client/Laser.Activation.Web.Client.csproj" />
+  <Project Path="Laser.Activation.Web/Laser.Activation.Web/Laser.Activation.Web.csproj" />
+</Solution>
