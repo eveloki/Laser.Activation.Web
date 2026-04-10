@@ -1,0 +1,123 @@
+﻿@page "/"
+@page "/login"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>登录 - 激活管理系统</PageTitle>
+
+<div class="login-container">
+    <div class="login-card">
+        <h2 class="text-center mb-4">
+            <span class="bi bi-shield-lock-fill" aria-hidden="true"></span>
+            激活管理系统
+        </h2>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">@errorMessage</div>
+        }
+
+        <EditForm Model="loginModel" OnValidSubmit="HandleLogin" FormName="LoginForm">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label class="form-label">用户名</label>
+                <InputText class="form-control" @bind-Value="loginModel.Username" placeholder="请输入用户名" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">密码</label>
+                <InputText type="password" class="form-control" @bind-Value="loginModel.Password" placeholder="请输入密码" />
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    <span>登录中...</span>
+                }
+                else
+                {
+                    <span>登 录</span>
+                }
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+<style>
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .login-card {
+        background: white;
+        border-radius: 12px;
+        padding: 2.5rem;
+        width: 100%;
+        max-width: 400px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .bi-shield-lock-fill {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' fill='%23667eea' class='bi bi-shield-lock-fill' viewBox='0 0 16 16'%3E%3Cpath d='M8 0c-.69 0-1.843.265-2.928.56-1.11.3-2.229.655-2.887.87a1.54 1.54 0 0 0-1.044 1.262c-.596 4.477.787 7.795 2.465 10.055a10.4 10.4 0 0 0 2.79 2.586c.4.25.75.43 1.044.543a3.3 3.3 0 0 0 .56.167 3.3 3.3 0 0 0 .56-.167c.294-.113.645-.293 1.044-.543a10.4 10.4 0 0 0 2.79-2.586c1.678-2.26 3.061-5.578 2.465-10.055a1.54 1.54 0 0 0-1.044-1.262 33 33 0 0 0-2.887-.87C9.843.265 8.69 0 8 0m0 5a1.5 1.5 0 0 1 .5 2.915l.385 1.99a.5.5 0 0 1-.491.595h-.788a.5.5 0 0 1-.49-.595l.384-1.99A1.5 1.5 0 0 1 8 5'/%3E%3C/svg%3E");
+        display: inline-block;
+        width: 32px;
+        height: 32px;
+        background-size: cover;
+        vertical-align: middle;
+        margin-right: 8px;
+    }
+</style>
+
+@code {
+    private LoginModel loginModel = new();
+    private bool isLoading = false;
+    private string errorMessage = "";
+
+    private class LoginModel
+    {
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+        errorMessage = "";
+
+        try
+        {
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+            var response = await module.InvokeAsync<LoginResult>("loginUser", loginModel.Username, loginModel.Password);
+
+            if (response.Success)
+            {
+                await module.InvokeVoidAsync("saveToken", response.Token);
+                Navigation.NavigateTo("/home", forceLoad: true);
+            }
+            else
+            {
+                errorMessage = response.Message ?? "登录失败";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"登录失败: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private class LoginResult
+    {
+        public bool Success { get; set; }
+        public string? Token { get; set; }
+        public string? Message { get; set; }
+    }
+}

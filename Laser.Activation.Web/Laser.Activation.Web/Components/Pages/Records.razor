@@ -1,0 +1,237 @@
+﻿@using Microsoft.EntityFrameworkCore
+
+@page "/records"
+@rendermode InteractiveServer
+@inject AppDbContext DbContext
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>激活记录 - 激活管理系统</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>激活记录</h2>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <input type="text" class="form-control" @bind="searchKeyword" @bind:event="oninput"
+                       placeholder="搜索项目名、部门、人员、版本..." />
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-primary w-100" @onclick="SearchRecords">
+                    搜索
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">加载中...</span>
+        </div>
+    </div>
+}
+else if (records.Any())
+{
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>项目名称</th>
+                    <th>部门</th>
+                    <th>负责人</th>
+                    <th>版本</th>
+                    <th>HWID (前32字符)</th>
+                    <th>激活时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var record in records)
+                {
+                    <tr>
+                        <td>@record.Id</td>
+                        <td>@record.ProjectName</td>
+                        <td>@record.DepartmentName</td>
+                        <td>@record.PersonName</td>
+                        <td>@record.VersionInf</td>
+                        <td>
+                            <code title="@record.IdentificationCode">
+                                @(record.IdentificationCode?.Length > 32
+                                    ? record.IdentificationCode[..32] + "..."
+                                    : record.IdentificationCode)
+                            </code>
+                        </td>
+                        <td>@(record.CreatedTime?.ToString("yyyy-MM-dd HH:mm:ss"))</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => CopyActivationCode(record.ActivationCode)"
+                                    title="复制激活码">
+                                复制
+                            </button>
+                            <button class="btn btn-sm btn-outline-success me-1" @onclick="() => DownloadActivation(record.Id)"
+                                    title="下载激活文件">
+                                下载
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(record.Id)"
+                                    title="删除记录">
+                                删除
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center">
+        <span>共 @totalRecords 条记录，第 @currentPage / @totalPages 页</span>
+        <div>
+            <button class="btn btn-outline-primary btn-sm me-2" disabled="@(currentPage <= 1)" @onclick="PrevPage">上一页</button>
+            <button class="btn btn-outline-primary btn-sm" disabled="@(currentPage >= totalPages)" @onclick="NextPage">下一页</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-info text-center">
+        暂无激活记录
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show mt-3">
+        @statusMessage
+        <button type="button" class="btn-close" @onclick="() => statusMessage = string.Empty"></button>
+    </div>
+}
+
+@code {
+    private List<ActivationRecord> records = new();
+    private bool isLoading = false;
+    private string searchKeyword = "";
+    private string statusMessage = "";
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private int totalRecords = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalRecords / pageSize);
+    private IJSObjectReference? module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadRecords();
+            StateHasChanged();
+        }
+    }
+
+    private async Task EnsureModule()
+    {
+        module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+    }
+
+    private async Task LoadRecords()
+    {
+        isLoading = true;
+        try
+        {
+            var query = DbContext.ActivationRecords.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(searchKeyword))
+            {
+                query = query.Where(r =>
+                    (r.ProjectName != null && r.ProjectName.Contains(searchKeyword)) ||
+                    (r.DepartmentName != null && r.DepartmentName.Contains(searchKeyword)) ||
+                    (r.PersonName != null && r.PersonName.Contains(searchKeyword)) ||
+                    (r.VersionInf != null && r.VersionInf.Contains(searchKeyword)));
+            }
+
+            totalRecords = await query.CountAsync();
+            records = await query
+                .OrderByDescending(r => r.CreatedTime)
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"加载记录失败: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SearchRecords()
+    {
+        currentPage = 1;
+        await LoadRecords();
+    }
+
+    private async Task PrevPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadRecords();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            await LoadRecords();
+        }
+    }
+
+    private async Task CopyActivationCode(string? activationCode)
+    {
+        if (string.IsNullOrEmpty(activationCode)) return;
+        await EnsureModule();
+        var success = await module!.InvokeAsync<bool>("copyToClipboard", activationCode);
+        statusMessage = success ? "激活码已复制到剪贴板" : "复制失败";
+    }
+
+    private async Task DownloadActivation(int recordId)
+    {
+        await EnsureModule();
+        await module!.InvokeVoidAsync("apiDownload", $"/api/activation/download/{recordId}");
+        statusMessage = "文件下载已开始";
+    }
+
+    private async Task ConfirmDelete(int id)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "确定要删除这条激活记录吗？");
+        if (!confirmed) return;
+
+        try
+        {
+            var record = await DbContext.ActivationRecords.FindAsync(id);
+            if (record != null)
+            {
+                DbContext.ActivationRecords.Remove(record);
+                await DbContext.SaveChangesAsync();
+                statusMessage = "删除成功";
+                await LoadRecords();
+            }
+            else
+            {
+                statusMessage = "记录不存在";
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"删除失败: {ex.Message}";
+        }
+    }
+}

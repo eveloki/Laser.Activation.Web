@@ -1,7 +1,37 @@
-﻿@page "/"
+﻿@page "/home"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>首页 - 激活管理系统</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="dashboard">
+    <h1>激光激活管理系统</h1>
+    <p class="lead">欢迎使用激光设备激活管理系统，支持设备HWID激活码生成与管理。</p>
 
-Welcome to your new app.
+    <div class="row mt-4">
+        <div class="col-md-4 mb-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">激活设备</h5>
+                    <p class="card-text">上传HWID文件(.req)，生成ECDSA激活码</p>
+                    <a href="/activation" class="btn btn-light">前往激活</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">激活记录</h5>
+                    <p class="card-text">查看所有设备的激活历史记录</p>
+                    <a href="/records" class="btn btn-light">查看记录</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">系统信息</h5>
+                    <p class="card-text">ECDSA-P256加密算法，MySQL数据存储</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,460 @@
+@using Microsoft.EntityFrameworkCore
+
+@page "/activation"
+@rendermode InteractiveServer
+@inject AppDbContext DbContext
+@inject IActivationService ActivationService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>设备激活 - 激活管理系统</PageTitle>
+
+<h2 class="mb-4">设备激活</h2>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">设备激活</h5>
+            </div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+
+                @if (!showResult)
+                {
+                    <form @onsubmit="HandleActivate" @onsubmit:preventDefault>
+                        @if (validationErrors.Any())
+                        {
+                            <div class="alert alert-danger">
+                                <ul class="mb-0">
+                                    @foreach (var err in validationErrors)
+                                    {
+                                        <li>@err</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">激活版本</label>
+                            <div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="activationVersion" id="versionV1"
+                                           checked="@IsV1" @onclick="SetV1" />
+                                    <label class="form-check-label" for="versionV1">V1</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="activationVersion" id="versionV2"
+                                           checked="@IsV2" @onclick="SetV2" />
+                                    <label class="form-check-label" for="versionV2">V2（含SHA1校验）</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">输入方式</label>
+                            <div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="inputMode" id="modeFile"
+                                           checked="@(inputMode == "file")" @onclick="SetFileMode" />
+                                    <label class="form-check-label" for="modeFile">文件上传</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="inputMode" id="modeText"
+                                           checked="@(inputMode == "text")" @onclick="SetTextMode" />
+                                    <label class="form-check-label" for="modeText">文本输入</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (inputMode == "file")
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">HWID文件 (.req) <span class="text-danger">*</span></label>
+                                <InputFile class="form-control" accept=".req" OnChange="HandleFileSelected" />
+                                @if (selectedFile != null)
+                                {
+                                    <div class="form-text text-success">
+                                        已选择: @selectedFile.Name (@(selectedFile.Size) bytes)
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">HWID文本 <span class="text-danger">*</span></label>
+                                <textarea class="form-control" @bind="hwidText" @bind:event="oninput" rows="5"
+                                          placeholder="粘贴HWID文本内容" />
+                                <div class="form-text">将自动去除首尾空白字符</div>
+                            </div>
+                        }
+
+                        <hr class="my-4" />
+                        <h6 class="mb-3">设备信息 <small class="text-muted">（均为必填）</small></h6>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">项目名称 <span class="text-danger">*</span></label>
+                                <input class="form-control" @bind="activateModel.ProjectName"
+                                       @bind:event="oninput" placeholder="输入项目名称" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">部门名称 <span class="text-danger">*</span></label>
+                                <input class="form-control" @bind="activateModel.DepartmentName"
+                                       @bind:event="oninput" placeholder="输入部门名称" />
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">负责人 <span class="text-danger">*</span></label>
+                                <input class="form-control" @bind="activateModel.PersonName"
+                                       @bind:event="oninput" placeholder="输入负责人" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">版本号 <span class="text-danger">*</span></label>
+                                <input class="form-control" @bind="activateModel.VersionInf"
+                                       @bind:event="oninput" placeholder="输入版本号" />
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" disabled="@IsActivateDisabled">
+                            @if (isActivating)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span>激活中...</span>
+                            }
+                            else
+                            {
+                                <span>激活设备</span>
+                            }
+                        </button>
+                    </form>
+                }
+
+                @if (showResult && !string.IsNullOrEmpty(activationCode))
+                {
+                    @if (isDuplicate)
+                    {
+                        <div class="alert alert-warning">
+                            <h5 class="alert-heading">⚠️ 该设备已激活（重复激活）</h5>
+                            <p class="mb-0">以下为上次激活时填入的信息，可直接复制或下载激活码。</p>
+                        </div>
+
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-sm-3 fw-bold">项目名称</div>
+                                    <div class="col-sm-9">@activateModel.ProjectName</div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-sm-3 fw-bold">部门名称</div>
+                                    <div class="col-sm-9">@activateModel.DepartmentName</div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-sm-3 fw-bold">负责人</div>
+                                    <div class="col-sm-9">@activateModel.PersonName</div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-sm-3 fw-bold">版本号</div>
+                                    <div class="col-sm-9">@activateModel.VersionInf</div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-sm-3 fw-bold">激活时间</div>
+                                    <div class="col-sm-9">@(existingCreatedTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-sm-3 fw-bold">记录ID</div>
+                                    <div class="col-sm-9">@resultRecordId</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-success">
+                            <h5 class="alert-heading">@resultMessage</h5>
+                            <div class="mt-2">
+                                <span class="text-muted">记录ID: @resultRecordId</span>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="card border-primary">
+                        <div class="card-body">
+                            <label class="form-label fw-bold">激活码@(IsV2 ? " (V2含SHA1)" : "")：</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control font-monospace" value="@activationCode"
+                                       readonly style="font-size: 0.85rem;" />
+                                <button class="btn btn-outline-secondary" @onclick="CopyCode" title="复制激活码">
+                                    复制
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-success" @onclick="CopyCode">
+                            复制激活码
+                        </button>
+                        <button class="btn btn-info text-white" @onclick="DownloadFile">
+                            下载激活授权文件 (.reqrep)
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="Reset">
+                            继续激活
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5 class="card-title">使用说明</h5>
+                <ol>
+                    <li>选择激活版本（V1或V2）</li>
+                    <li>选择输入方式：上传文件或粘贴文本</li>
+                    <li>提供HWID文件或粘贴HWID文本</li>
+                    <li>填写项目名称、部门名称、负责人、版本号（均为必填）</li>
+                    <li>点击"激活设备"按钮</li>
+                    <li>获取激活码后，复制或下载授权文件</li>
+                    <li>将激活码或授权文件导入客户端设备</li>
+                </ol>
+                <div class="alert alert-info mb-2">
+                    <small><strong>V1：</strong>标准格式，直接使用HWID生成激活码</small>
+                </div>
+                <div class="alert alert-info mb-2">
+                    <small><strong>V2：</strong>增强格式，输入输出均包含SHA1校验和，格式为"正文,SHA1"</small>
+                </div>
+                <div class="alert alert-warning mb-0">
+                    <small>HWID文件仅存在于内存中，不会保存到服务器磁盘。</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="alert alert-info alert-dismissible fade show mt-3">
+        @statusMessage
+        <button type="button" class="btn-close" @onclick="() => statusMessage = string.Empty"></button>
+    </div>
+}
+
+@code {
+    private ActivateModel activateModel = new();
+    private IBrowserFile? selectedFile;
+    private string hwidText = "";
+    private string inputMode = "file";
+    private string activationVersion = "v1";
+    private bool isActivating = false;
+    private bool showResult = false;
+    private bool isDuplicate = false;
+    private DateTime? existingCreatedTime;
+    private string errorMessage = "";
+    private string statusMessage = "";
+    private string resultMessage = "";
+    private string activationCode = "";
+    private int resultRecordId = 0;
+    private IJSObjectReference? module;
+    private List<string> validationErrors = [];
+
+    private bool IsV1 => activationVersion == "v1";
+    private bool IsV2 => activationVersion == "v2";
+    private bool IsActivateDisabled => isActivating ||
+        (inputMode == "file" && selectedFile == null) ||
+        (inputMode == "text" && string.IsNullOrWhiteSpace(hwidText));
+
+    private class ActivateModel
+    {
+        public string ProjectName { get; set; } = "";
+        public string DepartmentName { get; set; } = "";
+        public string PersonName { get; set; } = "";
+        public string VersionInf { get; set; } = "";
+    }
+
+    private void SetV1() => activationVersion = "v1";
+    private void SetV2() => activationVersion = "v2";
+    private void SetFileMode() => inputMode = "file";
+    private void SetTextMode() => inputMode = "text";
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        errorMessage = "";
+    }
+
+    private async Task EnsureModule()
+    {
+        module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+    }
+
+    private bool Validate()
+    {
+        validationErrors.Clear();
+        if (string.IsNullOrWhiteSpace(activateModel.ProjectName))
+            validationErrors.Add("请输入项目名称");
+        if (string.IsNullOrWhiteSpace(activateModel.DepartmentName))
+            validationErrors.Add("请输入部门名称");
+        if (string.IsNullOrWhiteSpace(activateModel.PersonName))
+            validationErrors.Add("请输入负责人");
+        if (string.IsNullOrWhiteSpace(activateModel.VersionInf))
+            validationErrors.Add("请输入版本号");
+        return validationErrors.Count == 0;
+    }
+
+    private async Task HandleActivate()
+    {
+        if (!Validate()) return;
+
+        string? rawInput = null;
+
+        if (inputMode == "file")
+        {
+            if (selectedFile == null)
+            {
+                errorMessage = "请先选择HWID文件";
+                return;
+            }
+
+            using (var stream = selectedFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024))
+            using (var reader = new StreamReader(stream))
+            {
+                rawInput = await reader.ReadToEndAsync();
+            }
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(hwidText))
+            {
+                errorMessage = "请输入HWID文本";
+                return;
+            }
+            rawInput = hwidText;
+        }
+
+        rawInput = rawInput.Trim();
+
+        if (string.IsNullOrWhiteSpace(rawInput))
+        {
+            errorMessage = "HWID内容为空";
+            return;
+        }
+
+        isActivating = true;
+        errorMessage = "";
+
+        try
+        {
+            string identificationCode;
+
+            if (IsV2)
+            {
+                var (body, error) = ActivationService.ParseV2Input(rawInput);
+                if (!string.IsNullOrEmpty(error))
+                {
+                    errorMessage = error;
+                    return;
+                }
+                identificationCode = body;
+            }
+            else
+            {
+                identificationCode = rawInput;
+            }
+
+            var existingRecord = await DbContext.ActivationRecords
+                .FirstOrDefaultAsync(r => r.IdentificationCode == identificationCode);
+
+            if (existingRecord != null)
+            {
+                isDuplicate = true;
+                activateModel.ProjectName = existingRecord.ProjectName ?? "";
+                activateModel.DepartmentName = existingRecord.DepartmentName ?? "";
+                activateModel.PersonName = existingRecord.PersonName ?? "";
+                activateModel.VersionInf = existingRecord.VersionInf ?? "";
+                existingCreatedTime = existingRecord.CreatedTime;
+                var rawCode = existingRecord.ActivationCode ?? "";
+                activationCode = IsV2
+                    ? ActivationService.FormatV2Output(rawCode)
+                    : rawCode;
+                resultRecordId = existingRecord.Id;
+                showResult = true;
+                return;
+            }
+
+            var code = ActivationService.GenerateActivationCode(identificationCode);
+
+            var record = new ActivationRecord
+            {
+                DataGuid = Guid.NewGuid().ToString(),
+                ProjectName = activateModel.ProjectName,
+                DepartmentName = activateModel.DepartmentName,
+                PersonName = activateModel.PersonName,
+                VersionInf = activateModel.VersionInf,
+                IdentificationCode = identificationCode,
+                ActivationCode = code,
+                CreatedTime = DateTime.Now
+            };
+
+            DbContext.ActivationRecords.Add(record);
+            await DbContext.SaveChangesAsync();
+
+            isDuplicate = false;
+            resultMessage = "激活成功";
+            activationCode = IsV2
+                ? ActivationService.FormatV2Output(code)
+                : code;
+            resultRecordId = record.Id;
+            showResult = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"激活失败: {ex.Message}";
+        }
+        finally
+        {
+            isActivating = false;
+        }
+    }
+
+    private async Task CopyCode()
+    {
+        if (string.IsNullOrEmpty(activationCode)) return;
+        await EnsureModule();
+        var success = await module!.InvokeAsync<bool>("copyToClipboard", activationCode);
+        statusMessage = success ? "激活码已复制到剪贴板" : "复制失败";
+    }
+
+    private async Task DownloadFile()
+    {
+        if (resultRecordId <= 0) return;
+        await EnsureModule();
+        await module!.InvokeVoidAsync("apiDownload",
+            $"/api/activation/download/{resultRecordId}?version={activationVersion}");
+        statusMessage = "授权文件下载已开始";
+    }
+
+    private void Reset()
+    {
+        showResult = false;
+        isDuplicate = false;
+        existingCreatedTime = null;
+        activationCode = "";
+        resultMessage = "";
+        resultRecordId = 0;
+        selectedFile = null;
+        hwidText = "";
+        activateModel = new ActivateModel();
+        validationErrors.Clear();
+        statusMessage = "";
+        errorMessage = "";
+    }
+}
