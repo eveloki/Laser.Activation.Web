@@ -19,18 +19,20 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public IActionResult Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
         {
             return BadRequest(new LoginResponse { Success = false, Message = "用户名和密码不能为空" });
         }
 
-        if (_authService.ValidateCredentials(request.Username, request.Password))
+        var result = await _authService.ValidateCredentialsAsync(request.Username, request.Password);
+        if (result != null)
         {
-            var token = _authService.GenerateJwtToken(request.Username);
+            var (userId, role) = result.Value;
+            var token = _authService.GenerateJwtToken(userId, request.Username, role);
             _logger.LogInformation("User {Username} logged in successfully", request.Username);
-            return Ok(new LoginResponse { Success = true, Token = token });
+            return Ok(new LoginResponse { Success = true, Token = token, Role = role, UserId = userId });
         }
 
         _logger.LogWarning("Login failed for user {Username}", request.Username);

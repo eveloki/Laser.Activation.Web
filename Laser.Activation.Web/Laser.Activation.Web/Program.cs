@@ -1,7 +1,9 @@
 using System.Text;
 using Laser.Activation.Web.Components;
 using Laser.Activation.Web.Data;
+using Laser.Activation.Web.Models;
 using Laser.Activation.Web.Services;
+using Isopoh.Cryptography.Argon2;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -15,8 +17,6 @@ builder.Services.AddRazorComponents()
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    //var serverVersion = new MySqlServerVersion(new Version(5, 7, 30));
-    //options.UseMySql(connectionString, serverVersion);
     var serverVersion = new MySqlServerVersion(new Version(12, 2, 2));
     options.UseMySql(connectionString, serverVersion);
 });
@@ -27,7 +27,7 @@ builder.Services.AddScoped<IActivationService, EcdsaActivationService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var jwtKey = builder.Configuration["Jwt:Key"] ?? "LaserActivationWebDefaultSecretKey2026!";
+        var jwtKey = builder.Configuration["Jwt:Key"] ?? "LaserActivationWebSecretKey2026!@#$%^&*()";
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -36,7 +36,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "Laser.Activation.Web",
             ValidAudience = builder.Configuration["Jwt:Audience"] ?? "Laser.Activation.Web",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            NameClaimType = "username",
+            RoleClaimType = "role"
         };
     });
 
@@ -45,6 +47,25 @@ builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    if (!db.Users.Any())
+    {
+        var defaultPassword = builder.Configuration["Auth:DefaultAdminPassword"] ?? "admin123";
+        db.Users.Add(new User
+        {
+            Username = "admin",
+            PasswordHash = Argon2.Hash(defaultPassword),
+            Role = "Admin",
+            CreatedTime = DateTime.Now
+        });
+        db.SaveChanges();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation("Default admin user created");
+    }
+}
 
 if (app.Environment.IsDevelopment())
 {

@@ -35,7 +35,7 @@ export function removeToken() {
 }
 
 export function isLoggedIn() {
-    const token = localStorage.getItem('authToken');
+    const token = getToken();
     if (!token) return false;
     try {
         const payload = JSON.parse(atob(token.split('.')[1]));
@@ -43,6 +43,28 @@ export function isLoggedIn() {
     } catch {
         return false;
     }
+}
+
+function decodePayload() {
+    const token = getToken();
+    if (!token) return null;
+    try {
+        return JSON.parse(atob(token.split('.')[1]));
+    } catch {
+        return null;
+    }
+}
+
+export function getUserId() {
+    return decodePayload()?.userId || '';
+}
+
+export function getUserName() {
+    return decodePayload()?.username || '';
+}
+
+export function getUserRole() {
+    return decodePayload()?.role || '';
 }
 
 export async function loginUser(username, password) {

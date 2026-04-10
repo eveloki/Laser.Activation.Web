@@ -38,4 +38,7 @@ public class ActivationRecord
 
     [Column("CreatedTime")]
     public DateTime? CreatedTime { get; set; }
+
+    [Column("ActivatedByUserId")]
+    public int? ActivatedByUserId { get; set; }
 }

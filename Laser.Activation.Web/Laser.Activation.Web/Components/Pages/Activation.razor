@@ -265,6 +265,7 @@
     private int resultRecordId = 0;
     private IJSObjectReference? module;
     private List<string> validationErrors = [];
+    private int? currentUserId;
 
     private bool IsV1 => activationVersion == "v1";
     private bool IsV2 => activationVersion == "v2";
@@ -294,6 +295,15 @@
     private async Task EnsureModule()
     {
         module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+    }
+
+    private async Task EnsureUserId()
+    {
+        if (currentUserId != null) return;
+        await EnsureModule();
+        var idStr = await module!.InvokeAsync<string>("getUserId");
+        if (int.TryParse(idStr, out var id))
+            currentUserId = id;
     }
 
     private bool Validate()
@@ -353,6 +363,7 @@
 
         try
         {
+            await EnsureUserId();
             string identificationCode;
 
             if (IsV2)
@@ -401,7 +412,8 @@
                 VersionInf = activateModel.VersionInf,
                 IdentificationCode = identificationCode,
                 ActivationCode = code,
-                CreatedTime = DateTime.Now
+                CreatedTime = DateTime.Now,
+                ActivatedByUserId = currentUserId
             };
 
             DbContext.ActivationRecords.Add(record);

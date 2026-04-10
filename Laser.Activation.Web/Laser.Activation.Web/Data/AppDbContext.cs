@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<ActivationRecord> ActivationRecords => Set<ActivationRecord>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -19,6 +20,13 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.ToTable("ActivationRecord");
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.ToTable("Users");
+            entity.HasIndex(e => e.Username).IsUnique();
         });
     }
 }

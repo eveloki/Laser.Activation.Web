@@ -1,0 +1,129 @@
+@using Microsoft.EntityFrameworkCore
+
+@page "/user-create"
+@rendermode InteractiveServer
+@inject AppDbContext DbContext
+@inject IAuthService AuthService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>创建用户 - 激活管理系统</PageTitle>
+
+<h2 class="mb-4">创建用户</h2>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">新建用户</h5>
+            </div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+                @if (!string.IsNullOrEmpty(statusMessage))
+                {
+                    <div class="alert alert-success alert-dismissible fade show">
+                        @statusMessage
+                        <button type="button" class="btn-close" @onclick="() => statusMessage = string.Empty"></button>
+                    </div>
+                }
+
+                <form @onsubmit="HandleCreate" @onsubmit:preventDefault>
+                    <div class="mb-3">
+                        <label class="form-label">用户名 <span class="text-danger">*</span></label>
+                        <input class="form-control" @bind="newUsername" @bind:event="oninput" placeholder="输入用户名" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">密码 <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" @bind="newPassword" @bind:event="oninput" placeholder="输入密码" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">确认密码 <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" @bind="confirmPassword" @bind:event="oninput" placeholder="再次输入密码" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">角色 <span class="text-danger">*</span></label>
+                        <div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="role" id="roleUser"
+                                       checked="@(newRole == "User")" @onclick="SetUserRole" />
+                                <label class="form-check-label" for="roleUser">普通用户</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="role" id="roleAdmin"
+                                       checked="@(newRole == "Admin")" @onclick="SetAdminRole" />
+                                <label class="form-check-label" for="roleAdmin">管理员</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" disabled="@IsCreateDisabled">
+                        创建用户
+                    </button>
+                    <a href="/users" class="btn btn-outline-secondary ms-2">返回用户列表</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string newUsername = "";
+    private string newPassword = "";
+    private string confirmPassword = "";
+    private string newRole = "User";
+    private string errorMessage = "";
+    private string statusMessage = "";
+    private bool IsCreateDisabled => string.IsNullOrWhiteSpace(newUsername)
+        || string.IsNullOrWhiteSpace(newPassword)
+        || string.IsNullOrWhiteSpace(confirmPassword);
+
+    private void SetUserRole() => newRole = "User";
+    private void SetAdminRole() => newRole = "Admin";
+
+    private async Task HandleCreate()
+    {
+        errorMessage = "";
+
+        if (newPassword != confirmPassword)
+        {
+            errorMessage = "两次输入的密码不一致";
+            return;
+        }
+
+        if (newPassword.Length < 4)
+        {
+            errorMessage = "密码长度至少4位";
+            return;
+        }
+
+        var existing = await DbContext.Users.FirstOrDefaultAsync(u => u.Username == newUsername);
+        if (existing != null)
+        {
+            errorMessage = "用户名已存在";
+            return;
+        }
+
+        var user = new User
+        {
+            Username = newUsername.Trim(),
+            PasswordHash = AuthService.HashPassword(newPassword),
+            Role = newRole,
+            CreatedTime = DateTime.Now
+        };
+
+        DbContext.Users.Add(user);
+        await DbContext.SaveChangesAsync();
+
+        statusMessage = $"用户 {user.Username} 创建成功";
+        newUsername = "";
+        newPassword = "";
+        confirmPassword = "";
+        newRole = "User";
+    }
+}

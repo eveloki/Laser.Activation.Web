@@ -49,6 +49,7 @@ else if (records.Any())
                     <th>版本</th>
                     <th>HWID (前32字符)</th>
                     <th>激活时间</th>
+                    <th>激活人</th>
                     <th>操作</th>
                 </tr>
             </thead>
@@ -69,6 +70,7 @@ else if (records.Any())
                             </code>
                         </td>
                         <td>@(record.CreatedTime?.ToString("yyyy-MM-dd HH:mm:ss"))</td>
+                        <td>@(GetUserName(record.ActivatedByUserId))</td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => CopyActivationCode(record.ActivationCode)"
                                     title="复制激活码">
@@ -114,6 +116,7 @@ else
 
 @code {
     private List<ActivationRecord> records = new();
+    private Dictionary<int, string> userNames = new();
     private bool isLoading = false;
     private string searchKeyword = "";
     private string statusMessage = "";
@@ -127,9 +130,21 @@ else
     {
         if (firstRender)
         {
+            await LoadUserNames();
             await LoadRecords();
             StateHasChanged();
         }
+    }
+
+    private async Task LoadUserNames()
+    {
+        userNames = await DbContext.Users.ToDictionaryAsync(u => u.Id, u => u.Username);
+    }
+
+    private string GetUserName(int? userId)
+    {
+        if (userId == null) return "-";
+        return userNames.TryGetValue(userId.Value, out var name) ? name : $"用户#{userId}";
     }
 
     private async Task EnsureModule()
