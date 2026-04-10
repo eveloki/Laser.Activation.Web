@@ -159,6 +159,17 @@ dotnet run --project Laser.Activation.Web/Laser.Activation.Web.csproj
 | 验证码 | SkiaSharp 3.x |
 | 签名 | ECDSA P-256（System.Security.Cryptography） |
 
+## 📦 NuGet 包
+
+| 包名 | 版本 | 说明 |
+| :--- | :--- | :--- |
+| [FreeRedis](https://www.nuget.org/packages/FreeRedis) | 1.5.5 | Redis 客户端，用于令牌会话存储 |
+| [Isopoh.Cryptography.Argon2](https://www.nuget.org/packages/Isopoh.Cryptography.Argon2) | 2.0.0 | Argon2 密码哈希 |
+| [Microsoft.AspNetCore.Authentication.JwtBearer](https://www.nuget.org/packages/Microsoft.AspNetCore.Authentication.JwtBearer) | 10.0.5 | JWT Bearer 认证中间件 |
+| [Microting.EntityFrameworkCore.MySql.Json.Microsoft](https://www.nuget.org/packages/Microting.EntityFrameworkCore.MySql.Json.Microsoft) | 10.0.5 | EF Core MySQL 提供程序（Pomelo） |
+| [SkiaSharp](https://www.nuget.org/packages/SkiaSharp) | 3.119.2 | 验证码图片生成 |
+| [Microsoft.AspNetCore.Components.WebAssembly.Server](https://www.nuget.org/packages/Microsoft.AspNetCore.Components.WebAssembly.Server) | 10.0.5 | Blazor WebAssembly 宿主支持 |
+
 ## 📄 项目结构
 
 ```
