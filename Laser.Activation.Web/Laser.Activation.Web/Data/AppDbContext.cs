@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
 
     public DbSet<ActivationRecord> ActivationRecords => Set<ActivationRecord>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<LoginLog> LoginLogs => Set<LoginLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +28,12 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.ToTable("Users");
             entity.HasIndex(e => e.Username).IsUnique();
+        });
+
+        modelBuilder.Entity<LoginLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.ToTable("LoginLog");
         });
     }
 }

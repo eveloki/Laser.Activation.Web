@@ -1,9 +1,11 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
+using FreeRedis;
+using Isopoh.Cryptography.Argon2;
 using Laser.Activation.Web.Components;
 using Laser.Activation.Web.Data;
 using Laser.Activation.Web.Models;
 using Laser.Activation.Web.Services;
-using Isopoh.Cryptography.Argon2;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -21,8 +23,15 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, serverVersion);
 });
 
+var redis = new RedisClient(builder.Configuration["Redis:ConnectionString"]
+                            ?? "127.0.0.1:6379,defaultDatabase=0");
+builder.Services.AddSingleton<RedisClient>(redis);
+builder.Services.AddSingleton<IRedisTokenService, RedisTokenService>();
+
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IActivationService, EcdsaActivationService>();
+builder.Services.AddScoped<ICaptchaService, CaptchaService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -40,6 +49,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             NameClaimType = "username",
             RoleClaimType = "role"
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                var tokenService = context.HttpContext.RequestServices
+                    .GetRequiredService<IRedisTokenService>();
+                var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                if (string.IsNullOrEmpty(jti) || !tokenService.IsTokenValid(jti))
+                {
+                    context.Fail("Token has been revoked or expired");
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -50,6 +73,11 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
+    var tokenService = scope.ServiceProvider.GetRequiredService<IRedisTokenService>();
+    tokenService.ClearAllTokens();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("All JWT tokens cleared on startup");
+
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     if (!db.Users.Any())
     {
@@ -62,7 +90,6 @@ using (var scope = app.Services.CreateScope())
             CreatedTime = DateTime.Now
         });
         db.SaveChanges();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         logger.LogInformation("Default admin user created");
     }
 }

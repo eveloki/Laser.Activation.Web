@@ -3,6 +3,7 @@
 @page "/users"
 @rendermode InteractiveServer
 @inject AppDbContext DbContext
+@inject IRedisTokenService RedisTokenService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -89,6 +90,9 @@ else
         if (firstRender)
         {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+            var valid = await module.InvokeAsync<bool>("validateAuth");
+            if (!valid) return;
+
             var role = await module.InvokeAsync<string>("getUserRole");
             if (role != "Admin")
             {
@@ -134,6 +138,7 @@ else
             var user = await DbContext.Users.FindAsync(userId);
             if (user != null)
             {
+                RedisTokenService.DeleteUserTokens(userId);
                 DbContext.Users.Remove(user);
                 await DbContext.SaveChangesAsync();
                 statusMessage = $"用户 {username} 已删除";

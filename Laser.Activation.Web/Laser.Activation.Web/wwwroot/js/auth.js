@@ -162,6 +162,34 @@ export async function apiDownload(url) {
     window.URL.revokeObjectURL(downloadUrl);
 }
 
+export async function validateAuth() {
+    const token = getToken();
+    if (!token) {
+        removeToken();
+        window.location.href = '/login';
+        return false;
+    }
+    try {
+        const response = await fetch('/api/auth/validate', {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            removeToken();
+            window.location.href = '/login';
+            return false;
+        }
+        return true;
+    } catch {
+        removeToken();
+        window.location.href = '/login';
+        return false;
+    }
+}
+
 export async function activateDevice(base64File, fileName, projectName, departmentName, personName, versionInf) {
     const token = getToken();
     const binaryString = atob(base64File);

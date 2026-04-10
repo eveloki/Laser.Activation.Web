@@ -1,6 +1,7 @@
-﻿@page "/"
+@page "/"
 @page "/login"
 @rendermode InteractiveServer
+@inject ICaptchaService CaptchaService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -18,17 +19,26 @@
             <div class="alert alert-danger">@errorMessage</div>
         }
 
-        <EditForm Model="loginModel" OnValidSubmit="HandleLogin" FormName="LoginForm">
-            <DataAnnotationsValidator />
-
+        <form @onsubmit="HandleLogin" @onsubmit:preventDefault>
             <div class="mb-3">
                 <label class="form-label">用户名</label>
-                <InputText class="form-control" @bind-Value="loginModel.Username" placeholder="请输入用户名" />
+                <input class="form-control" @bind="loginModel.Username" @bind:event="oninput" placeholder="请输入用户名" />
             </div>
 
             <div class="mb-3">
                 <label class="form-label">密码</label>
-                <InputText type="password" class="form-control" @bind-Value="loginModel.Password" placeholder="请输入密码" />
+                <input type="password" class="form-control" @bind="loginModel.Password" @bind:event="oninput" placeholder="请输入密码" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">验证码</label>
+                <div class="input-group">
+                    <input class="form-control captcha-input" @bind="captchaCode" @bind:event="oninput"
+                           placeholder="请输入验证码" maxlength="4" />
+                    <button type="button" class="btn btn-outline-secondary p-0" @onclick="RefreshCaptcha" title="点击刷新验证码">
+                        <img src="@captchaImage" alt="验证码" style="height:38px; cursor:pointer;" />
+                    </button>
+                </div>
             </div>
 
             <button type="submit" class="btn btn-primary w-100" disabled="@isLoading">
@@ -42,7 +52,7 @@
                     <span>登 录</span>
                 }
             </button>
-        </EditForm>
+        </form>
     </div>
 </div>
 
@@ -62,6 +72,9 @@
         max-width: 400px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.2);
     }
+    .captcha-input {
+        max-width: 120px;
+    }
     .bi-shield-lock-fill {
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' fill='%23667eea' class='bi bi-shield-lock-fill' viewBox='0 0 16 16'%3E%3Cpath d='M8 0c-.69 0-1.843.265-2.928.56-1.11.3-2.229.655-2.887.87a1.54 1.54 0 0 0-1.044 1.262c-.596 4.477.787 7.795 2.465 10.055a10.4 10.4 0 0 0 2.79 2.586c.4.25.75.43 1.044.543a3.3 3.3 0 0 0 .56.167 3.3 3.3 0 0 0 .56-.167c.294-.113.645-.293 1.044-.543a10.4 10.4 0 0 0 2.79-2.586c1.678-2.26 3.061-5.578 2.465-10.055a1.54 1.54 0 0 0-1.044-1.262 33 33 0 0 0-2.887-.87C9.843.265 8.69 0 8 0m0 5a1.5 1.5 0 0 1 .5 2.915l.385 1.99a.5.5 0 0 1-.491.595h-.788a.5.5 0 0 1-.49-.595l.384-1.99A1.5 1.5 0 0 1 8 5'/%3E%3C/svg%3E");
         display: inline-block;
@@ -75,6 +88,9 @@
 
 @code {
     private LoginModel loginModel = new();
+    private string captchaCode = "";
+    private string captchaId = "";
+    private string captchaImage = "";
     private bool isLoading = false;
     private string errorMessage = "";
 
@@ -84,10 +100,43 @@
         public string Password { get; set; } = "";
     }
 
+    protected override void OnInitialized()
+    {
+        RefreshCaptcha();
+    }
+
+    private void RefreshCaptcha()
+    {
+        var (id, img) = CaptchaService.GenerateCaptcha();
+        captchaId = id;
+        captchaImage = img;
+        captchaCode = "";
+    }
+
     private async Task HandleLogin()
     {
-        isLoading = true;
         errorMessage = "";
+
+        if (string.IsNullOrWhiteSpace(loginModel.Username) || string.IsNullOrWhiteSpace(loginModel.Password))
+        {
+            errorMessage = "用户名和密码不能为空";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(captchaCode))
+        {
+            errorMessage = "请输入验证码";
+            return;
+        }
+
+        if (!CaptchaService.Validate(captchaId, captchaCode.Trim()))
+        {
+            errorMessage = "验证码错误";
+            RefreshCaptcha();
+            return;
+        }
+
+        isLoading = true;
 
         try
         {
@@ -102,11 +151,13 @@
             else
             {
                 errorMessage = response.Message ?? "登录失败";
+                RefreshCaptcha();
             }
         }
         catch (Exception ex)
         {
             errorMessage = $"登录失败: {ex.Message}";
+            RefreshCaptcha();
         }
         finally
         {

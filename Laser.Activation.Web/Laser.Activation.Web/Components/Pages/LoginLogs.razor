@@ -1,0 +1,196 @@
+@using Microsoft.EntityFrameworkCore
+
+@page "/login-logs"
+@rendermode InteractiveServer
+@inject AppDbContext DbContext
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>登录记录 - 激活管理系统</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>登录记录</h2>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3 mb-2">
+                <input type="text" class="form-control" @bind="searchUsername" @bind:event="oninput"
+                       placeholder="搜索用户名..." />
+            </div>
+            <div class="col-md-3 mb-2">
+                <select class="form-select" @bind="filterSuccess">
+                    <option value="">全部状态</option>
+                    <option value="true">成功</option>
+                    <option value="false">失败</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-2">
+                <input type="date" class="form-control" @bind="filterDateFrom" />
+            </div>
+            <div class="col-md-3 mb-2">
+                <button class="btn btn-primary w-100" @onclick="SearchLogs">
+                    搜索
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">加载中...</span>
+        </div>
+    </div>
+}
+else if (logs.Any())
+{
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>用户名</th>
+                    <th>状态</th>
+                    <th>IP地址</th>
+                    <th>登录时间</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var log in logs)
+                {
+                    <tr>
+                        <td>@log.Id</td>
+                        <td>@log.Username</td>
+                        <td>
+                            @if (log.Success)
+                            {
+                                <span class="badge bg-success">成功</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">失败</span>
+                            }
+                        </td>
+                        <td><code>@(log.IpAddress ?? "-")</code></td>
+                        <td>@log.LoginTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center">
+        <span>共 @totalRecords 条记录，第 @currentPage / @totalPages 页</span>
+        <div>
+            <button class="btn btn-outline-primary btn-sm me-2" disabled="@(currentPage <= 1)" @onclick="PrevPage">上一页</button>
+            <button class="btn btn-outline-primary btn-sm" disabled="@(currentPage >= totalPages)" @onclick="NextPage">下一页</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-info text-center">
+        暂无登录记录
+    </div>
+}
+
+@code {
+    private List<LoginLog> logs = new();
+    private bool isLoading = false;
+    private string searchUsername = "";
+    private string filterSuccess = "";
+    private DateTime? filterDateFrom = null;
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private int totalRecords = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalRecords / pageSize);
+    private IJSObjectReference? module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+            var valid = await module.InvokeAsync<bool>("validateAuth");
+            if (!valid) return;
+
+            var role = await module.InvokeAsync<string>("getUserRole");
+            if (role != "Admin")
+            {
+                Navigation.NavigateTo("/home", forceLoad: true);
+                return;
+            }
+
+            await LoadLogs();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadLogs()
+    {
+        isLoading = true;
+        try
+        {
+            var query = DbContext.LoginLogs.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(searchUsername))
+            {
+                query = query.Where(l => l.Username.Contains(searchUsername));
+            }
+
+            if (!string.IsNullOrEmpty(filterSuccess) && bool.TryParse(filterSuccess, out var successVal))
+            {
+                query = query.Where(l => l.Success == successVal);
+            }
+
+            if (filterDateFrom.HasValue)
+            {
+                var from = filterDateFrom.Value.Date;
+                query = query.Where(l => l.LoginTime >= from);
+            }
+
+            totalRecords = await query.CountAsync();
+            logs = await query
+                .OrderByDescending(l => l.LoginTime)
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+        catch (Exception)
+        {
+            logs = new();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SearchLogs()
+    {
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task PrevPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadLogs();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            await LoadLogs();
+        }
+    }
+}

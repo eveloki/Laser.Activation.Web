@@ -1,4 +1,6 @@
 ﻿@page "/home"
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <PageTitle>首页 - 激活管理系统</PageTitle>
 
@@ -35,3 +37,17 @@
         </div>
     </div>
 </div>
+
+@code {
+    private IJSObjectReference? module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+            var valid = await module.InvokeAsync<bool>("validateAuth");
+            if (!valid) return;
+        }
+    }
+}

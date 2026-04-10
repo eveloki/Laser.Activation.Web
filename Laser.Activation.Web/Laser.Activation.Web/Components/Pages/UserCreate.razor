@@ -86,6 +86,25 @@
     private void SetUserRole() => newRole = "User";
     private void SetAdminRole() => newRole = "Admin";
 
+    private IJSObjectReference? module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+            var valid = await module.InvokeAsync<bool>("validateAuth");
+            if (!valid) return;
+
+            var role = await module.InvokeAsync<string>("getUserRole");
+            if (role != "Admin")
+            {
+                Navigation.NavigateTo("/home", forceLoad: true);
+                return;
+            }
+        }
+    }
+
     private async Task HandleCreate()
     {
         errorMessage = "";

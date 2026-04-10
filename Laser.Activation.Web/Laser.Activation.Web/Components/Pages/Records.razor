@@ -130,6 +130,10 @@ else
     {
         if (firstRender)
         {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+            var valid = await module.InvokeAsync<bool>("validateAuth");
+            if (!valid) return;
+
             await LoadUserNames();
             await LoadRecords();
             StateHasChanged();

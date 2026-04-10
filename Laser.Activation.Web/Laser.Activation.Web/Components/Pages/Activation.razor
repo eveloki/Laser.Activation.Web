@@ -281,6 +281,16 @@
         public string VersionInf { get; set; } = "";
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+            var valid = await module.InvokeAsync<bool>("validateAuth");
+            if (!valid) return;
+        }
+    }
+
     private void SetV1() => activationVersion = "v1";
     private void SetV2() => activationVersion = "v2";
     private void SetFileMode() => inputMode = "file";
